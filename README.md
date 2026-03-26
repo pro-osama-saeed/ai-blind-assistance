@@ -1,105 +1,120 @@
 # AI Blind Assistance
 
-An assistive application that helps blind and low-vision users understand their surroundings using AI—through voice-first interaction, real-time scene understanding, and accessible guidance.
+A voice-first web application that helps blind and low-vision users understand their surroundings using real-time AI — through object detection, text reading (OCR), and natural scene descriptions.
 
 ## Overview
 
-**AI Blind Assistance** aims to improve day-to-day independence by providing quick, spoken feedback about the environment. The project focuses on accessibility, low friction UX, and practical features that work in real-world conditions.
+**AI Blind Assistance** provides instant spoken feedback about the environment. Point your camera, choose a mode, and the app speaks what it sees. Designed for accessibility-first usage with minimal on-screen interaction.
 
-## Key Features (Planned / In Progress)
+## Features
 
-- **Voice-first experience** (hands-free)
-  - Speak commands like: *“What’s in front of me?”* or *“Read this text.”*
-- **Scene description**
-  - Summarizes what the camera sees (objects, people, environment context).
-- **Object detection & guidance**
-  - Identifies important objects (doors, chairs, stairs, etc.) and can provide directional hints.
-- **Text reading (OCR)**
-  - Reads printed text from signs, labels, documents.
-- **Accessible UI**
-  - Works smoothly with screen readers and large text settings.
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Object Detection** | Done | Detects objects and reports their position (left / ahead / right) with confidence filtering |
+| **Spatial Position Hints** | Done | Every detected object is tagged as left, center, or right |
+| **Text Reading (OCR)** | Done | Reads printed text from signs, labels, and documents using EasyOCR |
+| **Scene Description** | Done | Generates a natural spoken description (template-based or GPT-4o mini) |
+| **Voice Command Input** | Done | Web Speech API button — say "scan", "read text", or "describe" |
+| **High-Contrast Mode** | Done | Black background / yellow text toggle for low-vision users |
+| **Configurable Model** | Done | Choose Nano (fastest), Small (balanced), or Medium (most accurate) YOLO model |
+| **Confidence Threshold** | Done | Sidebar slider to filter out low-confidence detections |
+| **Multi-language TTS** | Done | English, Arabic, French, Spanish, German, Urdu |
+| **Offline Mode** | Planned | Offline TTS + bundled model |
+| **Mobile App** | Planned | iOS / Android wrapper |
 
-> If some features are not implemented yet, keep them under “Planned” to set clear expectations.
+## Tech Stack
 
-## Use Cases
-
-- Identifying objects in a room
-- Reading signs/labels and short documents
-- Getting a quick spoken description of the surroundings
-- Assistance during indoor navigation (future scope)
-
-## Tech Stack (Fill in)
-
-Update this section with what you actually use:
-
-- **Client:** (e.g., Android / Flutter / React Native / Web)
-- **Backend:** (e.g., Python FastAPI / Node.js / Firebase)
-- **AI:** (e.g., OpenCV, YOLO, OCR engine, vision-language model)
-- **Speech:** (e.g., device TTS/STT, Whisper, cloud speech APIs)
+- **UI:** Streamlit (Python web framework)
+- **Object Detection:** YOLOv8 via Ultralytics (Nano / Small / Medium)
+- **OCR:** EasyOCR (PyTorch-based, no system dependencies)
+- **Scene Description:** Template-based + optional OpenAI GPT-4o mini
+- **Speech Output:** Google Text-to-Speech (gTTS)
+- **Voice Input:** Web Speech API (browser-native, Chrome/Edge)
+- **Image Processing:** OpenCV
 
 ## Getting Started
 
 ### Prerequisites
-- (Add requirements here, e.g. Python 3.11+, Android Studio, Node 18+, etc.)
+
+- Python 3.10+
+- A webcam or mobile camera
+- Internet connection (for gTTS; optional for GPT scene descriptions)
 
 ### Installation
+
 ```bash
-# Example (replace with your real steps)
 git clone https://github.com/pro-osama-saeed/ai-blind-assistance.git
 cd ai-blind-assistance
+pip install -r requirements.txt
 ```
 
 ### Run
+
 ```bash
-# Example (replace with your real command)
-# python app.py
+streamlit run app.py
 ```
 
-## Project Structure (Optional)
+Open http://localhost:8501 in Chrome or Edge (required for voice commands).
 
-```text
+On first run, the YOLO model weights are downloaded automatically (~6 MB for Nano, ~22 MB for Small).
+
+## Project Structure
+
+```
 ai-blind-assistance/
-  README.md
-  (add folders here once they exist)
+├── app.py              # Main application
+├── requirements.txt    # Python dependencies
+└── README.md
 ```
+
+## Usage
+
+1. **Choose a mode** — Scan Objects, Read Text, or Describe Scene
+2. (Optional) **Say a voice command** — "scan", "read text", or "describe"
+3. **Take a photo** using the camera widget
+4. **Listen** — the app speaks the result automatically
+
+### Sidebar Options
+
+| Setting | Description |
+|---------|-------------|
+| High-Contrast Mode | Black/yellow UI for low-vision users |
+| Detection Model | Nano (fast) / Small (balanced) / Medium (accurate) |
+| Confidence Threshold | Filter out uncertain detections (default 50%) |
+| Voice Language | Language for spoken output |
+| OpenAI API Key | Optional — enables GPT-4o mini scene descriptions |
 
 ## Accessibility Notes
 
-This project is designed with accessibility as a priority:
-
-- Clear voice prompts and short responses
+- Voice-first design: all feedback is spoken automatically
 - Minimal on-screen interaction required
-- High-contrast friendly design (if UI exists)
-- Compatible with screen readers (TalkBack/VoiceOver) where applicable
+- High-contrast mode for low-vision users
+- Large buttons with clear labels
+- Compatible with browser screen readers (VoiceOver / NVDA)
 
 ## Roadmap
 
-- [ ] Basic camera capture + voice command trigger
-- [ ] Scene description model integration
-- [ ] OCR reading mode
-- [ ] Object detection with spoken results
-- [ ] Offline mode (where possible)
-- [ ] User testing + feedback iterations
+- [x] Camera capture + object detection
+- [x] Spatial position hints (left / ahead / right)
+- [x] Confidence threshold filtering
+- [x] Scene description (template + LLM)
+- [x] OCR text reading
+- [x] Voice command input
+- [x] High-contrast UI mode
+- [x] Multi-language voice output
+- [ ] Offline mode (pyttsx3 + bundled model)
+- [ ] Hazard/obstacle alert sounds
+- [ ] Mobile app (React Native / Flutter)
 
 ## Contributing
 
 Contributions are welcome.
 
-1. Fork the repo  
-2. Create a feature branch: `git checkout -b feature/my-feature`  
-3. Commit changes  
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit changes
 4. Open a Pull Request
 
 ## License
 
-Add a license (recommended: MIT) and update this section accordingly.
-
----
-
-## What I need from you to finalize it
-Reply with:
-1) Is this an **Android app**, **web app**, **Python project**, or something else?  
-2) What AI services/models are you using (if any)?  
-3) What features are already done vs planned?
-
-And I’ll rewrite the README to match your exact implementation and add correct install/run instructions.
+MIT
