@@ -2,3 +2,5 @@ ultralytics
 streamlit
 opencv-python-headless
 gTTS
+easyocr
+openai
