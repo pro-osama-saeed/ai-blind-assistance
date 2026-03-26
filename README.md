@@ -1,13 +1,3 @@
-You currently *don’t* have a real README yet—your `README.md` only contains:
-
-```md
-# ai-blind-assistance
-```
-
-Below is a **professional, ready-to-paste README draft** for your **ai-blind-assistance** project. If you tell me what tech stack you’re using (Android/iOS/Web, Python, etc.), I can tailor the *Install/Run* steps and architecture sections.
-
----
-
 # AI Blind Assistance
 
 An assistive application that helps blind and low-vision users understand their surroundings using AI—through voice-first interaction, real-time scene understanding, and accessible guidance.
