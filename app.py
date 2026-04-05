@@ -1,10 +1,20 @@
 import io
+from collections import Counter
 
 import cv2
 import numpy as np
 import streamlit as st
 from gtts import gTTS
 from ultralytics import YOLO
+
+# ── Page config (must be first Streamlit call) ────────────────────────────────
+
+st.set_page_config(
+    page_title="Blind Assistance: Environment Scanner",
+    page_icon="👁️",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -21,6 +31,20 @@ MEDIUM_THRESHOLD = 0.03  # >= 3% of frame → medium; below → far
 
 # Maximum number of non-hazard objects to include in the spoken summary.
 MAX_OTHER_OBJECTS = 3
+
+# Supported gTTS languages (subset of most common ones).
+TTS_LANGUAGES = {
+    "English": "en",
+    "Spanish": "es",
+    "French": "fr",
+    "German": "de",
+    "Italian": "it",
+    "Portuguese": "pt",
+    "Arabic": "ar",
+    "Chinese (Mandarin)": "zh-CN",
+    "Japanese": "ja",
+    "Korean": "ko",
+}
 
 
 # ── Model ─────────────────────────────────────────────────────────────────────
@@ -111,59 +135,223 @@ def summarize_detections(detections: list, hazard_mode: bool) -> str:
     return "I see " + "; ".join(parts) + "."
 
 
-def generate_tts_audio(text: str) -> bytes:
+def generate_tts_audio(text: str, lang: str = "en", slow: bool = False) -> bytes:
     """Generate MP3 audio for the given text using gTTS.
 
     Audio is produced entirely in memory — no files are written to disk.
 
     Returns:
         MP3-encoded audio as raw bytes, ready to pass to st.audio().
+    Raises:
+        RuntimeError: if gTTS generation fails.
     """
-    buf = io.BytesIO()
-    gTTS(text=text, lang="en", slow=False).write_to_fp(buf)
-    buf.seek(0)
-    return buf.read()
+    try:
+        buf = io.BytesIO()
+        gTTS(text=text, lang=lang, slow=slow).write_to_fp(buf)
+        buf.seek(0)
+        return buf.read()
+    except Exception as exc:
+        raise RuntimeError(f"Audio generation failed: {exc}") from exc
 
 
-# ── Streamlit UI ──────────────────────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 
-st.title("Blind Assistance: Environment Scanner")
-st.write(
+with st.sidebar:
+    st.header("⚙️ Controls")
+
+    st.subheader("🔍 Detection settings")
+    hazard_mode = st.checkbox(
+        "🚨 Safety / hazard mode",
+        value=True,
+        help="Prefix detected hazards (vehicles, animals, people) with 'Warning:' in the voice output.",
+    )
+    conf_threshold = st.slider(
+        "Confidence threshold",
+        min_value=0.10,
+        max_value=0.90,
+        value=0.25,
+        step=0.05,
+        help="Only detections above this confidence score are included. Lower = more detections; higher = fewer but more certain.",
+    )
+
+    st.divider()
+    st.subheader("🔊 Audio controls")
+    lang_label = st.selectbox(
+        "Voice language",
+        options=list(TTS_LANGUAGES.keys()),
+        index=0,
+        help="Language used for the spoken description.",
+    )
+    tts_lang = TTS_LANGUAGES[lang_label]
+    slow_speech = st.checkbox(
+        "Slow speech",
+        value=False,
+        help="Read the description at a slower pace (useful for language learners or difficult-to-hear environments).",
+    )
+
+    st.divider()
+    st.subheader("♿ Accessibility")
+    screen_reader_mode = st.checkbox(
+        "Screen-reader friendly mode",
+        value=False,
+        help="Hides the camera preview and annotated image by default; emphasises text output. Useful for screen-reader users.",
+    )
+
+    st.divider()
+    with st.expander("🔒 Privacy note"):
+        st.write(
+            "All image processing happens **locally on this machine** using the YOLOv8 model. "
+            "No images or detection results are transmitted to any external server. "
+            "Captured frames are not stored to disk."
+        )
+
+
+# ── Main UI ───────────────────────────────────────────────────────────────────
+
+st.title("👁️ Blind Assistance: Environment Scanner")
+st.caption(
     "Capture an image to scan your surroundings. "
     "The AI will detect objects and describe them with location and distance."
 )
 
-# Controls
-hazard_mode = st.checkbox("🚨 Safety / hazard mode", value=True)
-conf_threshold = st.slider(
-    "Confidence threshold", min_value=0.10, max_value=0.90, value=0.25, step=0.05
-)
+# Step indicator
+st.markdown("**How it works:** 📷 Capture → 🔍 Scan → 📋 Results → 🔊 Voice")
+st.divider()
 
-model = load_model()
+# ── Session state initialisation ──────────────────────────────────────────────
+if "last_sentence" not in st.session_state:
+    st.session_state.last_sentence = None
+if "last_audio" not in st.session_state:
+    st.session_state.last_audio = None
+if "last_detections" not in st.session_state:
+    st.session_state.last_detections = None
 
-# Camera input — a new capture triggers a full rerun automatically
-camera_image = st.camera_input("Capture and Scan Environment")
+# ── Model loading ─────────────────────────────────────────────────────────────
+try:
+    model = load_model()
+except Exception as exc:
+    st.error(
+        f"⚠️ Failed to load the detection model: {exc}\n\n"
+        "Ensure `yolov8n.pt` is available and the `ultralytics` package is installed."
+    )
+    st.stop()
 
+# ── Camera step ───────────────────────────────────────────────────────────────
+st.subheader("Step 1 — Capture")
+if not screen_reader_mode:
+    camera_image = st.camera_input(
+        "Point your camera at the scene and press the capture button",
+        help="A new capture automatically triggers a fresh scan.",
+    )
+else:
+    st.info(
+        "📷 Screen-reader mode: the camera preview is hidden. "
+        "Use the file uploader below to provide an image."
+    )
+    uploaded = st.file_uploader(
+        "Upload an image to scan",
+        type=["jpg", "jpeg", "png"],
+        help="Upload a photo to scan when camera preview is hidden.",
+    )
+    camera_image = uploaded  # unify the variable name for the rest of the flow
+
+# ── Processing ────────────────────────────────────────────────────────────────
 if camera_image is not None:
-    st.write("Scanning image with YOLOv8…")
+    st.subheader("Step 2 — Scanning")
 
-    # Decode the captured image into an OpenCV array
-    bytes_data = camera_image.getvalue()
-    cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
-    img_h, img_w = cv2_img.shape[:2]
+    with st.spinner("Running YOLOv8 object detection…"):
+        try:
+            bytes_data = camera_image.getvalue()
+            cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+            if cv2_img is None:
+                st.error("⚠️ Could not decode the image. Please try capturing again.")
+                st.stop()
+            img_h, img_w = cv2_img.shape[:2]
 
-    # Run YOLOv8 inference
-    results = model(cv2_img, verbose=False)
+            results = model(cv2_img, verbose=False)
+            detections = parse_detections(results, conf_threshold, img_w, img_h)
+            annotated_frame = results[0].plot()
+        except Exception as exc:
+            st.error(
+                f"⚠️ Object detection failed: {exc}\n\n"
+                "Try recapturing the image or lowering the confidence threshold."
+            )
+            st.stop()
 
-    # Filter and enrich detections with spatial/distance metadata
-    detections = parse_detections(results, conf_threshold, img_w, img_h)
+    st.toast("✅ Scan complete!", icon="✅")
 
-    # Show the annotated frame (Streamlit needs RGB, OpenCV gives BGR)
-    annotated_frame = results[0].plot()
-    st.image(annotated_frame, channels="BGR", caption="AI Detection Results")
-
-    # Build the spoken sentence and play audio (in-memory, no MP3 files saved)
+    # Persist results in session state for replay
     spoken_sentence = summarize_detections(detections, hazard_mode)
-    st.success(f"**Voice Output:** {spoken_sentence}")
-    audio_bytes = generate_tts_audio(spoken_sentence)
-    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+    st.session_state.last_sentence = spoken_sentence
+    st.session_state.last_detections = detections
+
+    try:
+        audio_bytes = generate_tts_audio(spoken_sentence, lang=tts_lang, slow=slow_speech)
+        st.session_state.last_audio = audio_bytes
+    except RuntimeError as exc:
+        st.warning(f"🔇 {exc}  —  Text output is still available below.")
+        st.session_state.last_audio = None
+
+# ── Results display ───────────────────────────────────────────────────────────
+if st.session_state.last_sentence is not None:
+    st.subheader("Step 3 — Results")
+
+    detections = st.session_state.last_detections or []
+    spoken_sentence = st.session_state.last_sentence
+
+    tab_text, tab_visual, tab_details = st.tabs(["📋 Text summary", "🖼️ Visual", "🔢 Details"])
+
+    with tab_text:
+        if detections:
+            hazard_items = [d for d in detections if d["is_hazard"]]
+            if hazard_items and hazard_mode:
+                st.warning(
+                    "⚠️ **Hazards detected:** "
+                    + ", ".join(
+                        f"{d['name']} ({d['position']}, {d['distance']})"
+                        for d in hazard_items
+                    )
+                )
+            st.success(f"**Voice output:** {spoken_sentence}")
+        else:
+            st.info("ℹ️ No objects were detected. Try adjusting the confidence threshold or recapturing.")
+
+    with tab_visual:
+        if screen_reader_mode:
+            st.info("🖼️ Annotated image hidden in screen-reader mode.")
+        elif "annotated_frame" in dir() and annotated_frame is not None:
+            st.image(annotated_frame, channels="BGR", caption="AI Detection Results", use_container_width=True)
+        else:
+            st.info("Capture a new image to see the annotated visual.")
+
+    with tab_details:
+        if detections:
+            counts = Counter(d["name"] for d in detections)
+            st.markdown("**Objects detected (by class):**")
+            for cls_name, cnt in sorted(counts.items(), key=lambda x: -x[1]):
+                is_hazard = cls_name in HAZARD_CLASSES
+                badge = " 🚨" if (is_hazard and hazard_mode) else ""
+                st.write(f"- **{cls_name}**{badge}: {cnt} instance{'s' if cnt > 1 else ''}")
+
+            st.markdown("**All detections (sorted by size):**")
+            sorted_dets = sorted(detections, key=lambda d: d["area_ratio"], reverse=True)
+            for i, d in enumerate(sorted_dets, 1):
+                conf_pct = f"{d['conf'] * 100:.0f}%"
+                hazard_tag = " 🚨 hazard" if (d["is_hazard"] and hazard_mode) else ""
+                st.write(
+                    f"{i}. **{d['name']}**{hazard_tag} — "
+                    f"{d['position']}, {d['distance']} "
+                    f"(conf: {conf_pct})"
+                )
+        else:
+            st.info("No detections to display.")
+
+    # ── Audio playback ────────────────────────────────────────────────────────
+    st.subheader("Step 4 — Voice output")
+
+    if st.session_state.last_audio is not None:
+        st.audio(st.session_state.last_audio, format="audio/mp3", autoplay=True)
+        if st.button("🔁 Replay audio", help="Play the spoken description again without recapturing."):
+            st.audio(st.session_state.last_audio, format="audio/mp3", autoplay=True)
+    else:
+        st.warning("Audio is unavailable. Please check your network connection and try again.")
