@@ -2,3 +2,7 @@ ultralytics
 streamlit
 opencv-python-headless
 gTTS
+gspread
+google-auth
+streamlit-webrtc
+av
