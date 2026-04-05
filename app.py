@@ -200,9 +200,12 @@ with st.sidebar:
     st.divider()
     with st.expander("🔒 Privacy note"):
         st.write(
-            "All image processing happens **locally on this machine** using the YOLOv8 model. "
-            "No images or detection results are transmitted to any external server. "
-            "Captured frames are not stored to disk."
+            "**Image processing** is performed **locally on this machine** using the YOLOv8 model. "
+            "No images or pixel data are transmitted to any external server. "
+            "Captured frames are not stored to disk.\n\n"
+            "**Voice synthesis** uses Google Text-to-Speech (gTTS), which sends the generated text "
+            "description to Google's servers to produce audio. If you are in a sensitive environment, "
+            "be aware that the spoken description text leaves this device."
         )
 
 
@@ -225,6 +228,8 @@ if "last_audio" not in st.session_state:
     st.session_state.last_audio = None
 if "last_detections" not in st.session_state:
     st.session_state.last_detections = None
+if "last_annotated_frame" not in st.session_state:
+    st.session_state.last_annotated_frame = None
 
 # ── Model loading ─────────────────────────────────────────────────────────────
 try:
@@ -284,6 +289,7 @@ if camera_image is not None:
     spoken_sentence = summarize_detections(detections, hazard_mode)
     st.session_state.last_sentence = spoken_sentence
     st.session_state.last_detections = detections
+    st.session_state.last_annotated_frame = annotated_frame
 
     try:
         audio_bytes = generate_tts_audio(spoken_sentence, lang=tts_lang, slow=slow_speech)
@@ -319,8 +325,8 @@ if st.session_state.last_sentence is not None:
     with tab_visual:
         if screen_reader_mode:
             st.info("🖼️ Annotated image hidden in screen-reader mode.")
-        elif "annotated_frame" in dir() and annotated_frame is not None:
-            st.image(annotated_frame, channels="BGR", caption="AI Detection Results", use_container_width=True)
+        elif st.session_state.last_annotated_frame is not None:
+            st.image(st.session_state.last_annotated_frame, channels="BGR", caption="AI Detection Results", use_container_width=True)
         else:
             st.info("Capture a new image to see the annotated visual.")
 
@@ -351,7 +357,6 @@ if st.session_state.last_sentence is not None:
 
     if st.session_state.last_audio is not None:
         st.audio(st.session_state.last_audio, format="audio/mp3", autoplay=True)
-        if st.button("🔁 Replay audio", help="Play the spoken description again without recapturing."):
-            st.audio(st.session_state.last_audio, format="audio/mp3", autoplay=True)
+        st.caption("Use the player controls above to replay. The audio also plays automatically after each new scan.")
     else:
         st.warning("Audio is unavailable. Please check your network connection and try again.")
